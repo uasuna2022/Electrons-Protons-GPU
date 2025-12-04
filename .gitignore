@@ -1,6 +1,48 @@
-*.i
-*.ii
-*.gpu
-*.ptx
-*.cubin
-*.fatbin
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+[Aa]rm/
+[Aa]rm64/
+[Bb]in/
+[Oo]bj/
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.ncb
+*.pdb
+*.ilk
+*.obj
+*.o
+
+# Visual Studio user specific files
+*.suo
+*.user
+*.aps
+*.opensdf
+*.sdf
+ipch/
+.vs/
+
+# CUDA / GPU specific
+# Pliki generowane przez kompilator NVCC
+*.cudafe1.c
+*.cudafe2.c
+*.cudah
+*.hash
+*.nvlink.reg
+*.module.reg
+*.device-stub.ptx
+*.device-stub.o
+*.gpu.c
+
+# Logs and other temporary files
+*.log
+*.tlog
+_UpgradeReport_Files/
+
+# NuGet/vcpkg
+packages/
+vcpkg_installed/
