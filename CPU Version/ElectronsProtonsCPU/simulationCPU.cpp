@@ -185,17 +185,17 @@ void SimulationCPU::render() {
         renderData[idx + 0] = x_openGL;
         renderData[idx + 1] = y_openGL;
 
-        if (h_charge[i] > 0) // Proton is red
+        if (h_charge[i] > 0) // Proton is light-gray
         { 
-            renderData[idx + 2] = 1.0F; 
-            renderData[idx + 3] = 0.2F; 
-            renderData[idx + 4] = 0.2F;
+            renderData[idx + 2] = 0.8F; 
+            renderData[idx + 3] = 0.8F; 
+            renderData[idx + 4] = 0.8F;
         }
-        else // Electron is blue
+        else // Electron is dark-gray
         { 
-            renderData[idx + 2] = 0.2f; 
-            renderData[idx + 3] = 0.2f; 
-            renderData[idx + 4] = 1.0f;
+            renderData[idx + 2] = 0.3F; 
+            renderData[idx + 3] = 0.3F; 
+            renderData[idx + 4] = 0.3F;
         }
     }
 

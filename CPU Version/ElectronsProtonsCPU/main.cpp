@@ -36,6 +36,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "CPU Reference Simulation", NULL, NULL);
     if (!window) 
@@ -64,6 +65,7 @@ int main() {
     // Main loop
     while (!glfwWindowShouldClose(window)) 
     {
+        double startTime = glfwGetTime();
         simCPU.update();
 
         // Set a clean color
@@ -74,6 +76,8 @@ int main() {
 
         glfwSwapBuffers(window); // Double-bufforing strategy
         glfwPollEvents();
+        double interval = glfwGetTime() - startTime;
+        cout << interval << endl;
     }
 
     glfwTerminate();
