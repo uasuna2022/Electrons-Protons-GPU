@@ -1,65 +1,50 @@
 ﻿#include "kernel.h"
-#include "workspace.cuh" // Tutaj musi być pełna definicja klasy
-#include "config.h"      // Tu są stałe (GRID_COLUMNS, WINDOW_WIDTH itp.)
+#include "workspace.cuh"
+#include "config.h"
 
 #include <device_launch_parameters.h>
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
 #include <math.h>
 
-// Rozmiar bloku wątków (standard optymalizacyjny)
 #define BLOCK_SIZE 256
 
-// =================================================================================
-// SEKCJA 1: FUNKCJE POMOCNICZE (DEVICE)
-// =================================================================================
-
-// Zamienia współrzędne (x,y) na 1D Hash komórki
+// Device helpers
+// Grid (x, y) -> 1D value
 __device__ int getGridHash(int gridPosX, int gridPosY) {
-    // Clamp (zabezpieczenie przed wyjściem poza siatkę)
     gridPosX = max(0, min(gridPosX, COLUMNS_COUNT - 1));
     gridPosY = max(0, min(gridPosY, ROWS_COUNT - 1));
     return gridPosY * COLUMNS_COUNT + gridPosX;
 }
 
-// Oblicza, w której komórce siatki znajduje się cząstka (na podstawie pozycji -1 do 1)
-__device__ int2 getGridPos(float x, float y) {
+// Get a grid cell of chosen particle (x,y) -> (gridCol, gridRow)
+// P.s. assume x,y are from [-1,1] interval 
+__device__ int2 getGridPosition(float x, float y) {
     int2 gridPos;
-    // Mapowanie [-1, 1] -> [0, GRID_COLUMNS]
-    gridPos.x = (int)((x + 1.0f) * 0.5f * COLUMNS_COUNT);
-    gridPos.y = (int)((y + 1.0f) * 0.5f * ROWS_COUNT);
+    gridPos.x = (int)((x + 1.0F) * 0.5F * COLUMNS_COUNT);
+    gridPos.y = (int)((y + 1.0F) * 0.5F * ROWS_COUNT);
     return gridPos;
 }
 
-// Pomocnicza do kolorów
+// Clip a color to ensure is is inside [0, 255] interval
 __device__ unsigned char clipColor(float val) {
-    return (unsigned char)(fminf(fmaxf(val, 0.0f), 255.0f));
+    return (unsigned char)(fminf(fmaxf(val, 0.0F), 255.0F));
 }
 
-// =================================================================================
-// SEKCJA 2: KERNELS (OBLICZENIA RÓWNOLEGŁE)
-// =================================================================================
-
-// KROK 1: Obliczanie hashy (do której komórki należy każda cząstka?)
-__global__ void calcHash(
-    int* d_gridParticleHash,
-    int* d_gridParticleIndex,
-    float* d_posX,
-    float* d_posY,
-    int numParticles)
+// Kernel functions
+// Find an index of grid cell, where every particle is situated + fill helper sort arrays 
+__global__ void calculateHash(int* d_gridParticleHash, int* d_gridParticleIndex, float* d_posX,
+    float* d_posY, int numParticles)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numParticles) return;
 
-    // 1. Pobierz pozycję (SoA)
     float px = d_posX[idx];
     float py = d_posY[idx];
 
-    // 2. Oblicz komórkę
-    int2 gridPos = getGridPos(px, py);
+    int2 gridPos = getGridPosition(px, py);
     int hash = getGridHash(gridPos.x, gridPos.y);
 
-    // 3. Zapisz wynik
     d_gridParticleHash[idx] = hash; // Klucz sortowania
     d_gridParticleIndex[idx] = idx; // Wartość (oryginalny indeks cząstki)
 }
@@ -157,7 +142,7 @@ __global__ void visualizeField(
     float v = (y / (float)height) * 2.0f - 1.0f;
 
     // 2. W jakiej komórce jest ten piksel?
-    int2 myGridPos = getGridPos(u, v);
+    int2 myGridPos = getGridPosition(u, v);
     float potential = 0.0f;
 
     // 3. Sprawdzamy sąsiednie komórki (3x3)
@@ -237,7 +222,7 @@ void launchSimulation(workspace* ws, float time)
 
     // Obliczamy Hash dla każdej cząstki
     int blocksParticles = (numParticles + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    calcHash << <blocksParticles, BLOCK_SIZE >> > (
+    calculateHash << <blocksParticles, BLOCK_SIZE >> > (
         ws->d_gridParticleHash,
         ws->d_gridParticleIndex,
         ws->d_posX,
