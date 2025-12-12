@@ -12,3 +12,5 @@ const float ELECTRON_MASS = 1.0F;
 const float PROTON_CHARGE = 1.0F;
 const float ELECTRON_CHARGE = -1.0F;
 const float K = 100.0F;
+
+const float DT = 0.05;

@@ -88,10 +88,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Dependencies\GLAD\src\glad.c" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="fieldShaders.h" />
+    <ClInclude Include="kernel.h" />
     <ClInclude Include="particleShaders.h" />
     <ClInclude Include="workspace.cuh" />
   </ItemGroup>

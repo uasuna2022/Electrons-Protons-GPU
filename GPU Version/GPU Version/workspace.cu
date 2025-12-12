@@ -16,7 +16,7 @@ workspace::~workspace()
     if (pboID)
         glDeleteBuffers(1, &pboID);
     if (texID)
-        glDeleteBuffers(1, &texID);
+        glDeleteTextures(1, &texID);
 }
 
 void workspace::allocateMemoryGPU()
@@ -25,17 +25,42 @@ void workspace::allocateMemoryGPU()
     size_t sizeInt = PARTICLES_COUNT * sizeof(int);
     size_t sizeGrid = ROWS_COUNT * COLUMNS_COUNT * sizeof(int);
 
+    cudaError_t err = cudaSuccess;
     cudaMalloc((void**)&d_posX, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_posX");
+    err = cudaSuccess;
+
     cudaMalloc((void**)&d_posY, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_posY");
+    err = cudaSuccess;
+
     cudaMalloc((void**)&d_velX, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_velX");
+    err = cudaSuccess;
+
     cudaMalloc((void**)&d_velY, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_velY");
+    err = cudaSuccess;
+
     cudaMalloc((void**)&d_charge, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_charge");
+    err = cudaSuccess;
 
     cudaMalloc((void**)&d_gridParticleHash, sizeInt);
+    checkErrorCUDA(err, "Malloc d_gridParticleHash");
+    err = cudaSuccess;
+
     cudaMalloc((void**)&d_gridParticleIndex, sizeInt);
+    checkErrorCUDA(err, "Malloc d_gridParticleIndex");
+    err = cudaSuccess;
 
     cudaMalloc((void**)&d_cellStart, sizeGrid);
-    cudaMalloc((void**)&d_cellEnd, sizeGrid); 
+    checkErrorCUDA(err, "Malloc d_cellStart");
+    err = cudaSuccess;
+
+    cudaMalloc((void**)&d_cellEnd, sizeGrid);
+    checkErrorCUDA(err, "Malloc d_cellEnd");
+    err = cudaSuccess;
 }
 
 void workspace::freeMemoryGPU()
@@ -87,7 +112,7 @@ void workspace::Initialize()
 
     size_t size = PARTICLES_COUNT * sizeof(float);
     
-    cudaError_t err;
+    cudaError_t err = cudaSuccess;
     err = cudaMemcpy(d_posX, h_posX.data(), size, cudaMemcpyHostToDevice);
     checkErrorCUDA(err, "h_posX -> d_posX memcpy error\0");
     err = cudaSuccess;
@@ -128,6 +153,11 @@ void workspace::Initialize()
 
     err = cudaGraphicsGLRegisterBuffer(&cudaResource, pboID, cudaGraphicsMapFlagsWriteDiscard);
     checkErrorCUDA(err, "PBO registration error\0");
+    if (err == cudaSuccess)
+        cout << "Initialization completed correctly!" << endl;
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void workspace::checkErrorCUDA(cudaError_t err, char* msg)
