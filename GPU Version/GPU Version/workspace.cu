@@ -6,7 +6,8 @@ using namespace std;
 
 workspace::workspace(): d_posX(nullptr), d_posY(nullptr), d_velX(nullptr), d_velY(nullptr),
 	d_charge(nullptr), d_gridParticleHash(nullptr), d_gridParticleIndex(nullptr),
-	d_cellEnd(nullptr), d_cellStart(nullptr), texID(0), pboID(0), cudaResource(nullptr) { }
+	d_cellEnd(nullptr), d_cellStart(nullptr), texID(0), pboID(0), cudaResource(nullptr),
+    d_fieldMap(nullptr) { }
 
 workspace::~workspace()
 {
@@ -24,6 +25,7 @@ void workspace::allocateMemoryGPU()
     size_t sizeFloat = PARTICLES_COUNT * sizeof(float);
     size_t sizeInt = PARTICLES_COUNT * sizeof(int);
     size_t sizeGrid = ROWS_COUNT * COLUMNS_COUNT * sizeof(int);
+    size_t sizeField = WINDOW_HEIGHT * WINDOW_WIDTH * sizeof(float2);
 
     cudaError_t err = cudaSuccess;
     cudaMalloc((void**)&d_posX, sizeFloat);
@@ -61,6 +63,10 @@ void workspace::allocateMemoryGPU()
     cudaMalloc((void**)&d_cellEnd, sizeGrid);
     checkErrorCUDA(err, "Malloc d_cellEnd");
     err = cudaSuccess;
+
+    cudaMalloc((void**)&d_fieldMap, sizeField);
+    checkErrorCUDA(err, "Malloc d_fieldMap");
+    err = cudaSuccess;
 }
 
 void workspace::freeMemoryGPU()
@@ -84,6 +90,9 @@ void workspace::freeMemoryGPU()
         cudaFree(d_cellStart);
     if (d_cellEnd) 
         cudaFree(d_cellEnd);
+
+    if (d_fieldMap)
+        cudaFree(d_fieldMap);
 }
 
 void workspace::Initialize()
@@ -155,6 +164,9 @@ void workspace::Initialize()
     checkErrorCUDA(err, "PBO registration error\0");
     if (err == cudaSuccess)
         cout << "Initialization completed correctly!" << endl;
+
+    err = cudaMemset(d_fieldMap, 0, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(float2));
+    checkErrorCUDA(err, "d_fieldMap memset error\0");
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);

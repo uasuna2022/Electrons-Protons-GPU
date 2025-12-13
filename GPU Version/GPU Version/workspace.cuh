@@ -39,6 +39,9 @@ public:
 	int* d_cellStart;
 	int* d_cellEnd;
 
+	// Bridge between physics and field map
+	float2* d_fieldMap;
+
 	// Screen data
 	unsigned int texID;
 	unsigned int pboID;
