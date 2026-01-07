@@ -17,7 +17,7 @@ class workspace
 private:
 	void allocateMemoryGPU();
 	void freeMemoryGPU();
-	void checkErrorCUDA(cudaError_t err, char* msg);
+	void checkErrorCUDA(cudaError_t err, const char* msg);
 public:
 	// Host data
 	vector<float> h_posX;
@@ -33,6 +33,11 @@ public:
 	float* d_velY;
 	float* d_charge;
 
+	// Sorted device data
+	float* d_sortedPosX;
+	float* d_sortedPosY;
+	float* d_sortedCharge;
+
 	// Grid data
 	int* d_gridParticleHash;
 	int* d_gridParticleIndex;
@@ -46,6 +51,10 @@ public:
 	unsigned int texID;
 	unsigned int pboID;
 	struct cudaGraphicsResource* cudaResource;
+
+	// Particles Visualization
+	unsigned int particleVBO;
+	struct cudaGraphicsResource* cudaParticleResource;
 
 	workspace();
 	~workspace();

@@ -5,6 +5,7 @@
 #include <device_launch_parameters.h>
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
+#include <thrust/gather.h>
 #include <math.h>
 
 #define BLOCK_SIZE 256
@@ -94,14 +95,14 @@ __global__ void findCellBounds(int* d_gridParticleHash, int* d_cellStart, int* d
     }
 
     // Last element case  
-    if (idx == numParticles - 1) {
+    if (idx == PARTICLES_COUNT - 1) {
         d_cellEnd[myHash] = idx + 1;
     }
 }
 
 // Kernel function which calculates both field map and graphics output
-__global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_fieldMap, float* d_posX,
-    float* d_posY, float* d_charge, int* d_gridParticleIndex, int* d_cellStart, int* d_cellEnd)
+__global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_fieldMap, float* d_sortedPosX,
+    float* d_sortedPosY, float* d_sortedCharge, int* d_cellStart, int* d_cellEnd)
 {
     int x = blockIdx.x * blockDim.x + threadIdx.x;  
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -136,20 +137,21 @@ __global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_field
 
                     for (int k = startIndex; k < endIndex; k++) {
 
-                        int realIdx = d_gridParticleIndex[k];
-
-                        float px = d_posX[realIdx];
-                        float py = d_posY[realIdx];
-                        float charge = d_charge[realIdx];
+                        float px = d_sortedPosX[k];
+                        float py = d_sortedPosY[k];
+                        float charge = d_sortedCharge[k];
 
                         float dX = u - px;
                         float dY = v - py;
-                        float distSq = dX * dX + dY * dY + 0.0001F;
+                        float distSq = dX * dX + dY * dY + 0.001F;
 
-                        float forceMag = charge / distSq;
-                        E.x += forceMag * (dX / sqrtf(distSq));
-                        E.y += forceMag * (dY / sqrtf(distSq));
-                        potentialSum += charge / sqrtf(distSq);
+                        if (sqrtf(distSq) < 0.04F)
+                        {
+                            float forceMag = charge / distSq;
+                            E.x += forceMag * (dX / sqrtf(distSq));
+                            E.y += forceMag * (dY / sqrtf(distSq));
+                            potentialSum += charge / sqrtf(distSq);
+                        }
                     }
                 }
             }
@@ -157,10 +159,14 @@ __global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_field
     }
 
     int pixelIndex = y * WINDOW_WIDTH + x;
+
+    float maxField = 500.0F;
+    E.x = fmaxf(-maxField, fminf(maxField, E.x));
+    E.y = fmaxf(-maxField, fminf(maxField, E.y));
     d_fieldMap[pixelIndex] = E;
 
     uchar4 color = make_uchar4(0, 0, 0, 255);
-    float intensity = fabs(potentialSum) * 50.0F;
+    float intensity = fabs(potentialSum) * 30.0F;
     if (potentialSum > 0) 
     {
         color.x = clipColor(intensity);
@@ -174,7 +180,7 @@ __global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_field
 }
 
 // This function updates particle physics based on the precomputed field map
-__global__ void updatePhycicsFromModel(float* d_posX, float* d_posY, float* d_velX, float* d_velY, float2* d_fieldMap)
+__global__ void updatePhycicsFromModel(float* d_posX, float* d_posY, float* d_velX, float* d_velY, float* d_charge, float2* d_fieldMap)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= PARTICLES_COUNT) 
@@ -232,6 +238,36 @@ __global__ void updatePhycicsFromModel(float* d_posX, float* d_posY, float* d_ve
     d_velY[idx] = vy;
 }
 
+struct ParticleVertex {
+    float x, y;
+    float r, g, b;
+};
+
+__global__ void packParticlesKernel(ParticleVertex* output, float* d_posX, float* d_posY, float* d_charge) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= PARTICLES_COUNT) return;
+
+    ParticleVertex v;
+    v.x = d_posX[idx];
+    v.y = d_posY[idx];
+
+    float q = d_charge[idx];
+    if (q > 0.0f) 
+    { 
+        v.r = 0.9f; 
+        v.g = 0.9f; 
+        v.b = 0.9f; 
+    } 
+    else 
+    { 
+        v.r = 0.3f; 
+        v.g = 0.3f; 
+        v.b = 0.3f; 
+    } 
+
+    output[idx] = v;
+}
+
 void launchSimulation(workspace* ws, float time)
 {
     int N = PARTICLES_COUNT;
@@ -246,11 +282,23 @@ void launchSimulation(workspace* ws, float time)
     thrust::device_ptr<int> t_index(ws->d_gridParticleIndex);
     thrust::sort_by_key(t_hash, t_hash + N, t_index);
 
-    // 3. Reset Cell Start/End
+    // 3. Reorder data
+    thrust::device_ptr<float> t_posX(ws->d_posX);
+    thrust::device_ptr<float> t_posY(ws->d_posY);
+    thrust::device_ptr<float> t_charge(ws->d_charge);
+    thrust::device_ptr<float> t_sortedPosX(ws->d_sortedPosX);
+    thrust::device_ptr<float> t_sortedPosY(ws->d_sortedPosY);
+    thrust::device_ptr<float> t_sortedCharge(ws->d_sortedCharge);
+
+    thrust::gather(t_index, t_index + N, t_posX, t_sortedPosX);
+    thrust::gather(t_index, t_index + N, t_posY, t_sortedPosY);
+    thrust::gather(t_index, t_index + N, t_charge, t_sortedCharge);
+
+    // 4. Reset Cell Start/End
     resetCellStartEnd << <blocksCells, BLOCK_SIZE >> > (ws->d_cellStart, ws->d_cellEnd);
     findCellBounds << <blocksParticles, BLOCK_SIZE >> > (ws->d_gridParticleHash, ws->d_cellStart, ws->d_cellEnd);
 
-    // 4. Calculate Field Map and Graphics Output
+    // 5. Calculate Field Map and Graphics Output
     uchar4* d_out;
     size_t numBytes;
     cudaGraphicsMapResources(1, &ws->cudaResource, 0);
@@ -258,14 +306,22 @@ void launchSimulation(workspace* ws, float time)
 
     dim3 block(16, 16);
     dim3 grid((WINDOW_WIDTH + block.x - 1) / block.x, (WINDOW_HEIGHT + block.y - 1) / block.y);
-    calculateFieldAndGraphics << <grid, block >> > (d_out, ws->d_fieldMap, ws->d_posX, ws->d_posY, ws->d_charge,
-        ws->d_gridParticleIndex, ws->d_cellStart, ws->d_cellEnd);
+    calculateFieldAndGraphics << <grid, block >> > (d_out, ws->d_fieldMap, ws->d_sortedPosX, ws->d_sortedPosY, ws->d_sortedCharge,
+         ws->d_cellStart, ws->d_cellEnd);
+    cudaGraphicsUnmapResources(1, &ws->cudaResource, 0);
 
     // TODO: add shared memory optimization here
 
-    // 5. Update Particle Physics from Field Map
-    updatePhycicsFromModel << <blocksParticles, BLOCK_SIZE >> > (ws->d_posX, ws->d_posY, ws->d_velX, ws->d_velY, ws->d_fieldMap);
+    // 6. Update Particle Physics from Field Map
+    updatePhycicsFromModel << <blocksParticles, BLOCK_SIZE >> > (ws->d_posX, ws->d_posY, ws->d_velX, ws->d_velY, ws->d_charge, ws->d_fieldMap);
 
-    cudaGraphicsUnmapResources(1, &ws->cudaResource, 0);
+    // 7. Update Particle Visualization (VBO)
+    ParticleVertex* d_particleGeo;
+    cudaGraphicsMapResources(1, &ws->cudaParticleResource, 0);
+    cudaGraphicsResourceGetMappedPointer((void**)&d_particleGeo, &numBytes, ws->cudaParticleResource);
+    packParticlesKernel << <blocksParticles, BLOCK_SIZE >> > (d_particleGeo, ws->d_posX, ws->d_posY, ws->d_charge);
+    cudaGraphicsUnmapResources(1, &ws->cudaParticleResource, 0);
+
+    // cudaGraphicsUnmapResources(1, &ws->cudaResource, 0);
     cudaDeviceSynchronize();
 }

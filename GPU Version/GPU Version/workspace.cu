@@ -5,9 +5,10 @@
 using namespace std;
 
 workspace::workspace(): d_posX(nullptr), d_posY(nullptr), d_velX(nullptr), d_velY(nullptr),
-	d_charge(nullptr), d_gridParticleHash(nullptr), d_gridParticleIndex(nullptr),
+	d_charge(nullptr), d_sortedPosX(nullptr), d_sortedPosY(nullptr), d_sortedCharge(nullptr),
+    d_gridParticleHash(nullptr), d_gridParticleIndex(nullptr),
 	d_cellEnd(nullptr), d_cellStart(nullptr), texID(0), pboID(0), cudaResource(nullptr),
-    d_fieldMap(nullptr) { }
+    d_fieldMap(nullptr), particleVBO(0), cudaParticleResource(nullptr) { }
 
 workspace::~workspace()
 {
@@ -18,6 +19,10 @@ workspace::~workspace()
         glDeleteBuffers(1, &pboID);
     if (texID)
         glDeleteTextures(1, &texID);
+    if (cudaParticleResource)
+        cudaGraphicsUnregisterResource(cudaParticleResource);
+    if (particleVBO)
+        glDeleteBuffers(1, &particleVBO);
 }
 
 void workspace::allocateMemoryGPU()
@@ -46,6 +51,18 @@ void workspace::allocateMemoryGPU()
 
     cudaMalloc((void**)&d_charge, sizeFloat);
     checkErrorCUDA(err, "Malloc d_charge");
+    err = cudaSuccess;
+
+    cudaMalloc((void**)&d_sortedPosX, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_sortedPosX");
+    err = cudaSuccess;
+
+    cudaMalloc((void**)&d_sortedPosY, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_sortedPosY");
+    err = cudaSuccess;
+
+    cudaMalloc((void**)&d_sortedCharge, sizeFloat);
+    checkErrorCUDA(err, "Malloc d_sortedCharge");
     err = cudaSuccess;
 
     cudaMalloc((void**)&d_gridParticleHash, sizeInt);
@@ -82,6 +99,13 @@ void workspace::freeMemoryGPU()
     if (d_charge) 
         cudaFree(d_charge);
 
+    if (d_sortedPosX) 
+        cudaFree(d_sortedPosX);
+    if (d_sortedPosY) 
+        cudaFree(d_sortedPosY);
+    if (d_sortedCharge) 
+        cudaFree(d_sortedCharge);
+
     if (d_gridParticleHash) 
         cudaFree(d_gridParticleHash);
     if (d_gridParticleIndex) 
@@ -106,8 +130,8 @@ void workspace::Initialize()
 
     mt19937 random_generator(time(NULL));
 
-    uniform_real_distribution<float> position(-1.0F, 1.0F);
-    uniform_real_distribution<float> velocities(-0.01F, 0.01F);
+    uniform_real_distribution<float> position(-0.99F, 0.99F);
+    uniform_real_distribution<float> velocities(-0.03F, 0.03F);
     uniform_int_distribution<int> charges(0, 1);
 
     for (int i = 0; i < PARTICLES_COUNT; i++)
@@ -165,6 +189,20 @@ void workspace::Initialize()
     if (err == cudaSuccess)
         cout << "Initialization completed correctly!" << endl;
 
+    // Generate vertex buffer object
+    glGenBuffers(1, &particleVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, particleVBO);
+
+    // Memory reserving (x, y, r, g, b -> 5 floats)
+    glBufferData(GL_ARRAY_BUFFER, PARTICLES_COUNT * 5 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+
+    err = cudaGraphicsGLRegisterBuffer(&cudaParticleResource, particleVBO, cudaGraphicsMapFlagsWriteDiscard);
+    checkErrorCUDA(err, "VBO registration error\0");
+    if (err == cudaSuccess)
+        cout << "Initialization completed correctly!" << endl;
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     err = cudaMemset(d_fieldMap, 0, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(float2));
     checkErrorCUDA(err, "d_fieldMap memset error\0");
 
@@ -172,7 +210,7 @@ void workspace::Initialize()
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void workspace::checkErrorCUDA(cudaError_t err, char* msg)
+void workspace::checkErrorCUDA(cudaError_t err, const char* msg)
 {
     if (err != cudaSuccess)
     {

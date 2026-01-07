@@ -1,0 +1,19 @@
+How to compile and run a project (on Windows)
+
+1. Clone a repository to your workspace. git clone https://github.com/uasuna2022/Electrons-Protons-GPU.git (link can be changed)
+2. Ensure you have a VS 2022 and x64 Native Tools Command Prompt for VS 2022. All CMake packages are already installed there, so you can use them. If you don't have VS 2022 or you use the other OS, install CMake package. 
+3. Go to <your_project_folder> and make a build directory (i.e.):
+	cd C/Users/Maksim/Study/Electrons-Protons_GPU/'GPU Version'/'GPU Version' 
+	mkdir build
+	cd build
+4. Run the following command:
+	cmake ..
+5. If the command is finished with success (Build files have been written to <...>) run the next command:
+	cmake --build . --config Release    
+6. If everything finished successfully, go to Release folder:
+	cd Release
+   You will see ElectronsProtons.exe file there. Run it:
+	.\ElectronsProtons.exe
+
+After all these steps the simulation may be run and you'll be able to see it. 
+You can tap 'space' key to stop/resume a simulation. 

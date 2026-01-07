@@ -5,34 +5,45 @@
 #include <string>
 #include <vector>
 
-// Załączenie Twoich nagłówków
 #include "config.h"
 #include "workspace.cuh"
 #include "kernel.h"
 #include "fieldShaders.h"
 #include "particleShaders.h" 
 
-// Funkcja pomocnicza do sprawdzania błędów kompilacji shaderów
-void checkCompileErrors(unsigned int shader, std::string type) {
+using namespace std;
+
+/*
+#ifdef _WIN32
+#include <windows.h>
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+*/
+
+// Helper function to check possible shaders compilation error
+void checkCompileErrors(unsigned int shader, string type) {
     int success;
     char infoLog[1024];
     if (type != "PROGRAM") {
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-            std::cerr << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            cerr << "Shader compilation error of type: " << type << "\n" << infoLog << endl;
         }
     }
     else {
         glGetProgramiv(shader, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-            std::cerr << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            cerr << "Program linking error of type: " << type << "\n" << infoLog << endl;
         }
     }
 }
 
-// Funkcja budująca program shaderowy z kodu źródłowego
+// Function which builds shader program from source 
 unsigned int buildShaderProgram(const char* vShaderCode, const char* fShaderCode) {
     unsigned int vertex, fragment;
 
@@ -55,74 +66,60 @@ unsigned int buildShaderProgram(const char* vShaderCode, const char* fShaderCode
     glLinkProgram(ID);
     checkCompileErrors(ID, "PROGRAM");
 
-    // Sprzątanie
+    // Clean-up
     glDeleteShader(vertex);
     glDeleteShader(fragment);
 
     return ID;
 }
 
-// Callback do zmiany rozmiaru okna
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
 
 int main() {
-    // ---------------------------------------
-    // 1. Inicjalizacja GLFW i Okna
-    // ---------------------------------------
+    // GLFW and window initialization
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
+        cerr << "Failed to initialize GLFW" << endl;
         return -1;
     }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);    
 
     GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "CUDA N-Body Simulation", NULL, NULL);
     if (window == NULL) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
+        cerr << "Failed to create GLFW window" << endl;
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // ---------------------------------------
-    // 2. Inicjalizacja GLAD
-    // ---------------------------------------
+    // GLAD initialization
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
-    // ---------------------------------------
-    // 3. Inicjalizacja Symulacji (CUDA Workspace)
-    // ---------------------------------------
-    // To utworzy PBO, Teksturę i zarejestruje zasoby w CUDA
+    // Simulation initialization
+    // PBOs, textures, VBOs are being created and registered with CUDA for interoperability here
     workspace sim;
     sim.Initialize();
 
-    // ---------------------------------------
-    // 4. Przygotowanie Grafiki (Field Quad)
-    // ---------------------------------------
-
-    // Kompilacja shaderów pola (tła)
+    
+    // Graphics setup
+    // Shaders compilation for the background field map
     unsigned int fieldShaderID = buildShaderProgram(vertexFieldShaderSource, fragmentFieldShaderSource);
 
-    // Definicja wierzchołków pełnoekranowego prostokąta (Quad)
-    // Format: X, Y, Z (OpenGL Coords) | U, V (Texture Coords / PosCUDA)
-    float quadVertices[] = {
-        // pozycje            // tex coords
-         1.0f,  1.0f, 0.0f,   1.0f, 1.0f, // prawy górny
-         1.0f, -1.0f, 0.0f,   1.0f, 0.0f, // prawy dolny
-        -1.0f, -1.0f, 0.0f,   0.0f, 0.0f, // lewy dolny
-        -1.0f,  1.0f, 0.0f,   0.0f, 1.0f  // lewy górny
+    // Vertices definition for a full-screen quad (a screen is being divided in 2 triangles)
+    float quadVertices[] = {     
+         1.0f,  1.0f, 0.0f,   1.0f, 1.0f, // Top-right
+         1.0f, -1.0f, 0.0f,   1.0f, 0.0f, // Bottom-right
+        -1.0f, -1.0f, 0.0f,   0.0f, 0.0f, // Bottom-left
+        -1.0f,  1.0f, 0.0f,   0.0f, 1.0f  // Top-left
     };
     unsigned int quadIndices[] = {
-        0, 1, 3, // pierwszy trójkąt
-        1, 2, 3  // drugi trójkąt
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
     };
 
     unsigned int quadVAO, quadVBO, quadEBO;
@@ -138,83 +135,125 @@ int main() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
 
-    // Atrybut 0: PosGL (vec3)
+    // Attribute 0 - position (x,y,z)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Atrybut 1: PosCUDA (vec2)
+    // Attribute 1 - texture coordinates (u, v)
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // ---------------------------------------
-    // 5. Pętla Główna
-    // ---------------------------------------
+    glBindVertexArray(0);
 
-    // Ustawienie uniforma tekstury (zawsze slot 0)
+    // Graphics setup
+    // Shaders compliation for particles
+    unsigned int particleShaderID = buildShaderProgram(vertexParticleShaderSource, fragmentParticleShaderSource);
+    unsigned int particleVAO;
+    glGenVertexArrays(1, &particleVAO);
+    glBindVertexArray(particleVAO);
+
+    // Bind the VBO created by CUDA (allows OpenGL to read particle positions updated by CUDA without CPU copying)
+    glBindBuffer(GL_ARRAY_BUFFER, sim.particleVBO);
+
+    // Attribute 0: position (x, y)
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Attribute 1: color (r, g, b)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
+
+    
+    // Main loop
     glUseProgram(fieldShaderID);
     glUniform1i(glGetUniformLocation(fieldShaderID, "fieldTexture"), 0);
 
+
+    glEnable(GL_PROGRAM_POINT_SIZE); // Enable shader to change point size
+    glDisable(GL_DEPTH_TEST);        
+
     double lastTime = glfwGetTime();
     int nbFrames = 0;
-    float totalTime = 0.0f;
+    float totalTime = 0.0F;
 
+    bool isPaused = false;
+    bool spacePressed = false;
+
+    // If space button is pressed, simulation is being stopped
     while (!glfwWindowShouldClose(window)) {
-        // Czas
         float currentTime = (float)glfwGetTime();
-        float deltaTime = currentTime - totalTime; // uproszczone, dla animacji
+        float deltaTime = currentTime - totalTime;
         totalTime = currentTime;
 
-        // --- KROK 1: Obliczenia CUDA ---
-        // Uruchamiamy symulację. Kernel pisze wyniki bezpośrednio do PBO (sim.pboID).
-        launchSimulation(&sim, totalTime);
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            if (!spacePressed) {
+                isPaused = !isPaused; 
+                spacePressed = true;  
 
-        // --- KROK 2: Renderowanie Pola ---
+                if (isPaused) cout << "Simulation paused" << endl;
+                else cout << "Simulation resumed" << endl;
+            }
+        }
+        else spacePressed = false;
+        
+
+
+        // 1st step - CUDA calculation: runs kernels to update phycics, field map and graphics buffers
+        if (!isPaused)
+            launchSimulation(&sim, totalTime);
+
+        // 2nd step - rendering
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // A. Aktualizacja Tekstury z PBO
-        // To jest kluczowy moment Interop. Kopiujemy dane z PBO (CUDA) do Tekstury (OpenGL)
-        // Dzieje się to wewnątrz pamięci GPU (bardzo szybko).
+        // 2.1 - Background draw
+        // Copy data from CUDA PBO to OPenGL Texture 
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, sim.pboID);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sim.texID);
-
-        // Kopiowanie (ostatni parametr NULL oznacza: weź dane z podpiętego bufora PBO)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0); // Odpinamy PBO
-
-        // B. Rysowanie Quada z teksturą
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        // Draw the full screen quad with the field texture
         glUseProgram(fieldShaderID);
         glBindVertexArray(quadVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
 
-        // ---------------------------------------
-        // Obsługa zdarzeń i buforów
-        // ---------------------------------------
+        // 2.2 - Particles draw
+        // Draw points directly using data from sim.particleVBO shared with CUDA
+        glUseProgram(particleShaderID);
+        glBindVertexArray(particleVAO);
+        glDrawArrays(GL_POINTS, 0, PARTICLES_COUNT);
+        glBindVertexArray(0);
+
+        // Events handle
         glfwSwapBuffers(window);
         glfwPollEvents();
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
-        // Licznik FPS w tytule
+        // Print the info about FPS 
         double now = glfwGetTime();
         nbFrames++;
         if (now - lastTime >= 1.0) {
-            std::string title = "CUDA Electrostatics | FPS: " + std::to_string(nbFrames) +
-                " | Particles: " + std::to_string(PARTICLES_COUNT);
+            string title = "CUDA Electrostatics | FPS: " + to_string(nbFrames) + " | Particles: " + to_string(PARTICLES_COUNT);
             glfwSetWindowTitle(window, title.c_str());
             nbFrames = 0;
             lastTime += 1.0;
         }
     }
 
-    // Sprzątanie
+    // Cleaning
     glDeleteVertexArrays(1, &quadVAO);
     glDeleteBuffers(1, &quadVBO);
     glDeleteBuffers(1, &quadEBO);
     glDeleteProgram(fieldShaderID);
+
+    glDeleteVertexArrays(1, &particleVAO);
+    glDeleteProgram(particleShaderID);
 
     glfwTerminate();
     return 0;
