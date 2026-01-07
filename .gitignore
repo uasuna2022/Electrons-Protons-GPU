@@ -9,7 +9,6 @@ x64/
 *.dll
 *.so
 *.a
-*.lib
 *.ncb
 *.pdb
 *.ilk
