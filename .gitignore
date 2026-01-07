@@ -6,7 +6,6 @@ x64/
 [Aa]rm64/
 [Bb]in/
 [Oo]bj/
-*.exe
 *.dll
 *.so
 *.a
