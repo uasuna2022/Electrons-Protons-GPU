@@ -165,6 +165,7 @@ __global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_field
     E.y = fmaxf(-maxField, fminf(maxField, E.y));
     d_fieldMap[pixelIndex] = E;
 
+    /*
     uchar4 color = make_uchar4(0, 0, 0, 255);
     float intensity = fabs(potentialSum) * 30.0F;
     if (potentialSum > 0) 
@@ -175,6 +176,15 @@ __global__ void calculateFieldAndGraphics(uchar4* outputSurface, float2* d_field
     {
         color.z = clipColor(intensity);
     }
+    */
+
+    uchar4 color = make_uchar4(0, 0, 0, 255);
+    float maxVisualPotential = 100.0F;
+    float intensity = fminf((fabs(potentialSum) / maxVisualPotential) * 255.0F, 255.0F);
+    if (potentialSum > 0)
+        color.x = clipColor(intensity);
+    if (potentialSum < 0)
+        color.z = clipColor(intensity);
 
     outputSurface[pixelIndex] = color;
 }
